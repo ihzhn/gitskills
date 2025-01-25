@@ -7,651 +7,139 @@ tags:
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
-/*
-先假设内存大小为64kb,块大小为1K,一个文件或目录最多可以用3个盘块存储
-1、先建立位示图，利用随机函数生成*/
-// 1为目录，2为文件
-void menu();               //菜单
-void initdir();            //初始化根目录
-void byteCreat();          //创建位示图
-void updatelujing();       //更新当前光标所在位置（就是路径）
-int updateTable(int, int); //当文件删除时，修改FAT表和修改位示图
-int findNULL();            //寻找空位置
-void getTime();            //获取时间
- 
-void create_Dir(int); //创建目录或者文件
-void delDir(char *);  //删除空目录
-void printNow();      //显示当前目录下的文件或目录
-void delFile(char *); //删除文件
-void cdir(char *);    //切换下一级
-void byteShow();      //显示位示图
-void fatShow();       //显示FATm
-void openfile(char);  //打开文件
-void closefile(char); //关闭文件
- 
-typedef struct FCB
-{                       //文件或目录控制块
-    char name[10];      //文件或目录名
-    int size;           //文件或目录大小，目录大小可设置为 0
-    char type;          //类型，1 为文件，2 为目录
-    int first;          //外存起始位置  -1被占 -2未被占
-    char datetime[128]; //日期时间，格式为 yyyymmdd hhmmss
-    struct FCB *next;   //下一个兄弟节点，相同父结点的节点称为兄弟结点
-    struct FCB *child;  //第一个孩子节点
-    struct FCB *parent; //父节点
-    int read = 0;       //是否打开，1为打开，0为关闭
- 
-} F;
- 
-int COUNT = 0; //文件个数
-int F_SIZE;    //一个文件可以占几个盘块
-// int F_SIZE_LIST[50]; //每个文件的盘块个数
- 
-F *p = NULL;     //全局变量，指向当前目录
-int b[100][100]; //位示图数组
-int FAT[100];    //文件分配表
-// node *head = NULL; //全局变量，?
- 
-// 1、获取当前创建时间，利用time函数
-void getTime(FCB *f)
+#include <io.h>
+#include<assert.h>
+typedef struct Node
 {
-    time_t t; //时间对象变量
-    char buf[128];
-    memset(buf, 0, sizeof(buf)); //清空数组
+    char symbol;
+    struct Node *left;
+    struct Node *right;
  
-    struct tm *tmp; //时间结构体
-    t = time(NULL);
-    tmp = localtime(&t);
-    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", tmp);
- 
-    for (int i = 0; i < 128; i++) //存时间
-    {
-        f->datetime[i] = buf[i];
+    
+}Node;
+
+void copy(string filename)
+{
+    char a[20]={“filename”};
+    fopen("fileone","w");
+    char b[20]={“fileone”};
+    char ch;
+    FILE *fp1,*fp2;
+
+    if((fp1=fopen(a,"r"))==NULL){
+        printf("打开错误");
+        exit(0);
     }
+    while((ch=fgetc(fp1))!=EOF){
+        fputc(ch,fp2);
+    }
+    fclose(“filename”);
+    fclose("fileone");
+
+    system("pause");
+    system("cls");
 }
-//创建位示图
-void byteCreat()
+
+void delete(string &filename)
 {
-    srand((unsigned)time(NULL));
-    for (int i = 0; i < 8; i++)
-    {
-        for (int j = 0; j < 8; j++)
-        {
-            b[i][j] = rand() % 2; //随机生成位示图 0表未用，1表已用
- 
-            printf("%d ", b[i][j]); //打印出来
- 
-            //修改一下把-2表示未用
-            if (b[i][j] == 0)
-            {
-                FAT[i * 8 + j] = -2; //未被占；
-            }
-            else if (b[i][j] == 1)
-            {
-                FAT[i * 8 + j] = -1; //-1：被占
-            }
-        }
-        printf("\n");
-    }
- 
-    printf("\n***FAT表的初始值如下：\n");
-    printf("\n");
-    for (int i = 0; i < 64; i++)
-    {
- 
-        printf("%3d ", FAT[i]);
-        if (i != 0 && ((i + 1) % 8 == 0))
-        {
-            printf("\n");
-        }
-    }
-    printf("\n");
-}
-// 2、寻找空位置
-int findNULL()
-{
-    int a = 0; //哨兵
-    int x;     //转化为盘块号
-    int m[100];
-    for (int k = 0; k < F_SIZE; k++)
-    {
-        a = 0;
-        for (int i = 0; i < 8; i++) //第一行0,一趟就找一个0，而且是最先出现的0.
-        {
-            for (int j = 0; j < 8; j++)
-            {
-                if (b[i][j] == 0)
-                {
-                    x = i * 8 + j; //转化为盘块号
-                    m[k] = x;      //存入第一个盘块位置
-                    b[i][j] = 1;
-                    a = 1;
-                    break;
-                }
-            }
-            if (a == 1)
-                break; //跳出第二层循环
-        }
-    }
- 
-    printf("\n\n-------找到的盘块位置如下------\n\n");
-    for (int k = 0; k < F_SIZE; k++)
-    {
-        printf("%d,", m[k]);
-    }
- 
-    //创建FAT表
-    for (int k = 0; k < F_SIZE; k++)
-    {
-        int y = 0;
-        y = m[k];          //当k=0时，把第一个盘块号给Y，
-        FAT[y] = m[k + 1]; //第盘块Y号指向下一个盘块号，所以FAT[y]的值代表下一个盘块号位置
-        printf("\nFAT[y]下一个盘块是：%d\n", FAT[y]);
-        //最后一个没有下一个盘块位置
-        if (k == F_SIZE - 1)
-        {
-            FAT[y] = -1; //外存起始位置  -1被占 -2未被占,最后一个没有下一个盘块位置
-            printf("\nFAT[y]下一个盘块是：%d\n", FAT[y]);
-        }
-        //最后一个没有下一个盘块位置
-    }
-    return m[0];
-}
- 
-// 3、创建目录
-void create_Dir(int a)
-{
-    char name[10];
-    F *np = p;
-    printf("请输入目录或文件的名字\n");
-    scanf(" %s", name);
- 
-    F *f = (F *)malloc(sizeof(F)); //新建空白目录
-    strcpy(f->name, name);
-    //赋值
-    //-------创文件--------
-    if (a == 1) // ，1表示文件
-    {
-        int f_size;
-        printf("\n请输入文件大小(单位B):");
-        scanf("%d", &f_size);
-        f->size = f_size;
-        F_SIZE = (f_size - 1) / 10; //向下取整，算个需要多少盘块
-        f->read = 0;
-        // F_SIZE_LIST[COUNT] = F_SIZE; //将这个文件需要的盘块数存入数组中
-        COUNT++;               //文件数加一
-        f->type = 1;           //写入类型
-        f->first = findNULL(); //找空位置,返回x,x是第一个磁盘号（位置）
-        printf("\n----找到的起始位置是:%d\n\n", f->first);
-    }
- 
-    //----------创目录---------
-    if (a == 2) // 2表示目录
-    {
-        f->type = 2;
-        f->first = -2;
-        f->size = 0;
-    }
-    getTime(f);
-    f->child = NULL;
-    f->next = NULL;
-    f->parent = np; // np当前目录
-    if (np->child == NULL)
-    {
-        np->child = f;
-    }
-    //当前使用用的是链表进行存储文件的，映射成一棵树，
-    //在当前目录创建，需要找到一个结点，该结点的兄弟结点为空时，插入，就是在最后插入
-    else //进入当前子目录
-    {
-        np = np->child; //指向第一个目录或文件，假设为F1
-        if (a == 2)
-        {
-            if (np->type == 2) //目录
-            {
-                //有两个情况，1是建在目录和文件，2是建在目录与目录中（正常情况）
-                while (np->next != NULL) //指当前F1的兄弟结点不为空
-                {
-                    if (np->type == 2 && np->next->type == 1) //新建在目录和文件中间
-                    {
-                        break;
-                    }
-                    np = np->next; //指向下一个，继续找兄弟节点直到找到没有兄弟结点的位置，也就是末尾。
-                }
-                //没有兄弟节点位置，末尾插入，
-                f->next = np->next;
-                np->next = f;
-            }
-        }
- 
-        else if (a == 1) //文件的，同理
-        {
-            while (np->next != NULL)
-            {
-                np = np->next;
-            }
-            f->next = np->next;
-            np->next = f;
-        }
-    }
-}
- 
-// 4、更新当前光标所在位置（就是路径）
-void updatelujing() //更新当前光标所在位置（就是路径）
-{
-    F *np = p;     //将np指向当前目录 ，FCB
-    F a[100];      //临时存储文件或目录信息结构体数组
-    int count = 0; // 局部变量??
- 
-    while (np->parent != NULL) //如果父结点不为空，第一次未创建文件或目录时不会执行
-    {
-        a[count] = *np;  //将当前信息存入数组a中
-        np = np->parent; // np从当前位置一直往上找父节点，直到根目录就结束
-        count++;         //???
-    }
-    //输出当前目录前的路径，除了它本身，这样是为了可以输出root\>
-    for (int i = count - 1; i > 0; i--)
-    {
-        printf("%s\\", a[i].name);
-    }
- 
-    //输出当前目录的名字。
-    printf("%s\\", p->name); // p是当前目录，没有创建目录时，p->name为root
-    printf(">");             //最后打印出来就是 root\>
-}
- 
-//初始化根目录
-void initdir()
-{
-    F *f = (F *)malloc(sizeof(F)); //开辟一个FCB,根目录
-    //初始化根目录 独立出来
-    strcpy(f->name, "root");
-    f->type = 2;      // 2表目录
-    f->size = 0;      //大小为0
-    getTime(f);       //获取创建时的时间
-    f->child = NULL;  //孩子结点为空
-    f->next = NULL;   //下一个兄弟节点
-    f->parent = NULL; //父节点
-    f->first = -2;
-    p = f; // p指向当前目录，p指向根目录
-}
- 
-void delDir(char *name) //删除空目录，删除当前目录的一级子目录，且为空目录
-{
-    int flag = 0;
-    F *np = p;
-    if (np->child == NULL) //当前目录下的
-        printf("无此目录\n");
+    const char *file=filename;
+    int result=_unlink(file);
+    if(result==0)
+    printf("文件删除成功");
     else
-    {
-        np = np->child;
-        if (strcmp(np->name, name) == 0 && np->child == NULL) //为第一个，当前的子目录
-        {
-            p->child = np->next;
-            free(np);
-            printf("成功删除此目录\n");
-            flag = 1;
-        }
-        else
-        {
-            while (np->next != NULL) //找到要删除的前一个并且为空文件夹
-            {
-                if (strcmp(np->next->name, name) == 0 && np->next->child == NULL)
-                {
-                    np->next = np->next->next; //把当前np的兄弟结点指向要删除的兄弟结点，后一个目录往前移
-                    flag = 1;
-                    printf("成功删除此目录\n");
-                    break;
-                }
-                np = np->next;
-            }
-        }
-        if (flag == 0)
-        {
-            printf("删除失败！无当前目录或当前目录不为空\n");
-        }
-    }
-}
- 
-//输出当前目录下的文件或目录
-void printNow()
-{
-    F *np = p;
-    if (p->child == NULL)
-    {
-        printf("当前文件夹为空\n");
-    }
-    else
-    {
-        np = np->child;
-        // printf("%s    <DIR>      .\n", np->parent->datetime);
-        printf("%s    <DIR>      ..\n", np->parent->datetime);
-        while (np != NULL)
-        {
-            printf("%s 类型：%d 名字:%s\n", np->datetime, np->type, np->name);
-            np = np->next;
-        }
-    }
-}
- 
-//删除文件
-void delFile(char *name)
-{
-    int flag = 0;
-    F *np = p;
-    if (np->child == NULL)
-        printf("无此文件\n");
-    else
-    {
-        np = np->child;
-        if (strcmp(np->name, name) == 0) //为第一个
-        {
-            if (np->read == 0)
-            {
-                printf("\n文件状态%d \n", np->read);
-                p->child = np->next;
-                printf("\n成功删除此文件\n");
-                updateTable(np->first, np->size); //更新fat表
-                flag = 1;
-            }
-            else
-            {
-                printf("\n文件状态%d \n", np->read);
-                flag = 1;
-                printf("\n文件已经打开，请关闭再删除！\n");
-                printf("删除失败！\n\n");
-            }
-        }
-        else
-        {
-            while (np->next != NULL)
-            {
-                if (strcmp(np->next->name, name) == 0) //找到前一个，要删除的
-                {
-                    if (np->next->read == 0)
-                    {
-                        printf("\n文件状态%d \n", np->next->read);
-                        updateTable(np->next->first, np->next->size); //更新fat表
-                        np->next = np->next->next;
-                        flag = 1;
-                        printf("成功删除此文件\n");
-                        break;
-                    }
-                    else
-                    {
-                        printf("\n文件状态%d \n", np->next->read);
-                        flag = 1;
-                        printf("\n文件已经打开，请关闭再删除！\n");
-                        printf("删除失败！\n\n");
-                    }
-                }
-                np = np->next;
-            }
-        }
-        if (flag == 0)
-        {
-            printf("删除失败！无当前目录或当前目录不为空\n");
-        }
-    }
-}
- 
-//更新FAT表和位示图
-int updateTable(int first, int size) //更新FAT表
-{
- 
-    int next = first; // 第一个盘号
-    int p_count = (size - 1) / 10;
-    int m[50]; //临时数组，存该文件的每个盘块号
-    //m[0] = next;
-    int count = 0;
-    //找到所有盘块号，存入m
-    int i = next;
-    while (1)
-    {
-        // if (FAT[i] != -2 && FAT[i] != -1) //不为-2
- 
-        int j = FAT[i];
-        m[count] = i;
-        count++;
-        i = j;
-        if (j == -1)
-        {
-            break;
-        }
-    }
-    //修改FAT
-    for (int i = 0; i < p_count; i++)
-    {
-        FAT[m[i]] = -2;
-    }
- 
-    //修改位示图
-    for (int i = 0; i < p_count; i++)
-    {
-        b[m[i] / 8][m[i] % 8] = 0;
-    }
+    perror("删除失败");
     return 0;
 }
- 
-//
-void cdir(char *name) //切换目录下一个目录
-{
-    F *np = p;
-    np = np->child;                  //让np指向当前目录的孩子结点（下一级目录或文件）
-    if (strcmp(np->name, name) == 0) //判断两个是否相等
-    {
-        p = np; //找到并进入，当前目录p就为np
+
+void compressFile(const char *inputFile, const char *outputFile, Code *codes) {
+    FILE *in = fopen(inputFile, "r");
+    FILE *out = fopen(outputFile, "wb"); 
+
+    assert(in && "Failed to open input file.");
+    assert(out && "Failed to open output file.");
+
+    char ch;
+    while ((ch = fgetc(in)) != EOF) {
+
+        fwrite(codes[ch].code, sizeof(char), strlen(codes[ch].code), out);
     }
-    else
-    {
-        while (strcmp(np->name, name) != 0)
-        {                                    //不等于，就找下一个
-            np = np->next;                   //找其
-            if (strcmp(np->name, name) == 0) //找到就进入
-            {
-                p = np; //找到并进入
-                break;
-            }
-            if (np == NULL) //全部遍历完，都没有找到
-            {
-                printf("未找到此目录");
-                break;
-            }
+
+    fclose(in);
+    fclose(out);
+}
+
+void decompressFile(const char *inputFile, const char *outputFile, Node *root) {
+    FILE *in = fopen(inputFile, "rb"); 
+    FILE *out = fopen(outputFile, "w");
+
+    assert(in && "Failed to open input file.");
+    assert(out && "Failed to open output file.");
+
+    char bit;
+    Node *current = root;
+    while ((bit = fgetc(in)) != EOF) {
+        current = (bit == '0') ? current->left : current->right;
+        if (!current->left && !current->right) {
+            fputc(current->symbol, out);
+            current = root;
         }
     }
+
+    fclose(in);
+    fclose(out);
 }
- 
-//显示位示图
-void byteShow()
-{
-    for (int i = 0; i < 8; i++)
-    {
-        for (int j = 0; j < 8; j++)
-        {
-            printf("%d ", b[i][j]);
-        }
-        printf("\n");
-    }
-}
- 
-void fatShow() //文件配置表
-{
-    printf("\n");
-    printf("\n-------FAT表如下:\n");
-    for (int i = 0; i < 64; i++)
-    {
- 
-        printf("%3d ", FAT[i]);
-        if (i != 0 && ((i + 1) % 8 == 0))
-        {
-            printf("\n");
-        }
-    }
-    printf("\n");
-}
- 
-void openfile(char *name) //打开文件
-{
-    F *np = p;
-    np = np->child;                  //让np指向当前目录的孩子结点（下一级目录或文件）
-    if (strcmp(np->name, name) == 0) //判断两个是否相等
-    {
-        np->read = 1; //标记状态已读
-    }
-    else
-    {
-        while (strcmp(np->name, name) != 0)
-        {                                    //不等于，就找下一个
-            np = np->next;                   //找其
-            if (strcmp(np->name, name) == 0) //找到就进入
-            {
-                // p = np; //找到并进入
-                np->read = 1; //标记状态已打开
-                printf("\n文件已经打开！\n");
+
+
+ int main() {
+
+    while (1) {
+        printf("请选择您想要进行的操作:\n");
+        printf("1---cp. 复制文件\n");
+        printf("2---rm. 删除文件\n");
+        printf("3---tar. 压缩文件\n");
+        printf("4---tarz. 解压文件\n");
+        printf("请输入选项: ");
+        int choice;
+        scanf("%d", &choice);
+        switch (choice) {
+            case 1:
+                printf("请输入文件名: ");
+                scanf("%s", string filename);
+                copy(filename);
                 break;
-            }
-            if (np == NULL) //全部遍历完，都没有找到
-            {
-                printf("未找到此目录");
+ 
+            case 2:
+                printf("请输入文件名: ");
+                scanf("%s", filename);
+                delete(&filename);
                 break;
-            }
+ 
+            case 3:
+                printf("请输入文件名: ");
+                scanf("%s", filename);
+                const char *a=filename;
+                fopen("filez","w");
+                const char *b=filez;
+                Node *root=NULL;
+               compressFile(a,b,root);
+                break;
+ 
+            case 4:
+                printf("请输入文件名: ");
+                scanf("%s", filename);
+                 const char *a=filename;
+                 fopen("filez","w");
+                const char *b=filez;
+                Node *root=NULL;
+               decompressFile(a,b,root);
+                break;
+
+            default:
+                printf("无效的选项。\n");
+                break;
         }
     }
-}
  
-void closefile(char *name) //关闭文件
-{
-    F *np = p;
-    np = np->child;                                   //让np指向当前目录的孩子结点（下一级目录或文件）
-    if (strcmp(np->name, name) == 0 && np->type == 1) //判断两个是否相等,且为文件
-    {
-        np->read = 0; //标记状态已读
-    }
-    else
-    {
-        while (strcmp(np->name, name) != 0)
-        {                                                     //不等于，就找下一个
-            np = np->next;                                    //找其
-            if (strcmp(np->name, name) == 0 && np->type == 1) //找到就进入
-            {
-                // p = np; //找到并进入
-                np->read = 0; //标记状态已关闭
-                printf("\n文件已经关闭！\n");
-                break;
-            }
-            if (np == NULL) //全部遍历完，都没有找到
-            {
-                printf("未找到此目录");
-                break;
-            }
-        }
-    }
-}
- 
-//菜单
-void menu()
-{
- 
-    char choise[10];
-    char f_name[10];
-    int flag = 1;
-    while (flag)
-    {
-        printf("\n*************文件系统***************************\n");
-        printf("             1.md（创建目录）\n");
-        printf("             2.rd（删除目录）\n");
-        printf("             3.dir（列出当前目录下信息）\n");
-        printf("             4.mk（创建文件）\n");
-        printf("             5.del（删除文件）\n");
-        printf("             6.cd（切换目录）\n");
-        printf("             7.cd..（返回上一级）\n");
-        printf("             8.fat（展示文件分配表FAT）\n");
-        printf("             9.show（展现位示图）\n");
-        printf("             10.open（打开文件）\n");
-        printf("             11.close（关闭文件）\n");
-        printf("*************************************************\n\n");
-        do
-        {
-            //更新当前所在(当前所在路径）*
-            updatelujing();
-            scanf("%s", &choise);
- 
-            //创建目录*
-            if (strcmp(choise, "md") == 0)
-            {
-                create_Dir(2); // 2为目录，1为文件
-            }
-            //删除空目录*
-            else if (strcmp(choise, "rd") == 0)
-            {
-                //printf("请输入需要删除的文件名\n");
-                scanf("%s", f_name);
-                delDir(f_name);
-            }
-            //显示当前目录下目录或文件*
-            else if (strcmp(choise, "dir") == 0) //
-            {
-                printNow();
-            }
-            //创建文件*
-            else if (strcmp(choise, "mk") == 0)
-            {
-                create_Dir(1); // 1为文件
-            }
-            //删除文件*
-            else if (strcmp(choise, "del") == 0)
-            {
-                //printf("请输入需要删除的文件名\n");
-                scanf("%s", f_name);
-                delFile(f_name); //删除文件
-            }
-            //切换下一级目录*
-            else if (strcmp(choise, "cd") == 0)
-            {
-                //printf("请输入目录名\n");
-                scanf(" %s", f_name);
-                cdir(f_name);
-            }
-            //切换上一级*
-            else if (strcmp(choise, "cd..") == 0)
-            {
-                p = p->parent; //直接让当前目录的指针指向父节点。
-            }
-            //展示FAT*
-            else if (strcmp(choise, "fat") == 0)
-            {
-                fatShow();
-            }
-            //展示位示图*
-            else if (strcmp(choise, "show") == 0)
-            {
-                byteShow();
-            }
-            else if (strcmp(choise, "open") == 0) //读文件
-            {
-                //printf("请输入需要读的文件名\n");
-                scanf("%s", f_name);
-                openfile(f_name);
-            }
-            else if (strcmp(choise, "close") == 0) //写文件
-            {
-                //printf("请输入需要关闭的文件名\n");
-                scanf("%s", f_name);
-                closefile(f_name);
-            }
- 
-        } while (flag == 1);
-    }
-}
- 
-int main()
-{
- 
-    printf("\n------初始化根目录中...\n");
-    initdir(); //初始化根目录
-    printf("****初始化位示图\n");
-    byteCreat(); //创建位示图
-    menu();      //菜单
     return 0;
 }
-————————————————
+  
